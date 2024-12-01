@@ -1,0 +1,80 @@
+id: user_registration
+namespace: auth
+
+tasks:
+  - id: validate_user
+    type: io.kestra.core.tasks.scripts.Shell
+    commands:
+      - java -cp ${workingDir} UserAuthenticationSystem.tasks.UserValidationTask
+
+  - id: send_welcome_email
+    type: io.kestra.plugin.notifications.mail.Email
+    from: "system@auth.com"
+    to: "{{ inputs.email }}"
+    subject: "Welcome to Our System"
+    content: |
+      Welcome {{ inputs.username }}!
+      Your account has been successfully created.
+
+  - id: log_registration
+    type: io.kestra.core.tasks.log.Log
+    message: "New user registered: {{ inputs.username }} at {{ datetime }}"
+
+---
+id: password_reset
+namespace: auth
+
+tasks:
+  - id: generate_reset_token
+    type: io.kestra.core.tasks.scripts.Shell
+    commands:
+      - java -cp ${workingDir} UserAuthenticationSystem.tasks.TokenGenerationTask
+
+  - id: send_reset_email
+    type: io.kestra.plugin.notifications.mail.Email
+    from: "system@auth.com"
+    to: "{{ inputs.email }}"
+    subject: "Password Reset Request"
+    content: |
+      Click the following link to reset your password:
+      {{ inputs.resetLink }}
+
+  - id: cleanup_expired_tokens
+    type: io.kestra.core.tasks.scripts.Shell
+    commands:
+      - java -cp ${workingDir} UserAuthenticationSystem.tasks.TokenCleanupTask
+
+---
+id: security_monitoring
+namespace: auth
+
+tasks:
+  - id: check_failed_attempts
+    type: io.kestra.core.tasks.scripts.Shell
+    commands:
+      - java -cp ${workingDir} UserAuthenticationSystem.tasks.SecurityMonitoringTask
+
+  - id: notify_admin
+    type: io.kestra.plugin.notifications.mail.Email
+    from: "system@auth.com"
+    to: "admin@auth.com"
+    subject: "Security Alert"
+    content: |
+      Multiple failed login attempts detected for user: {{ inputs.username }}
+      IP Address: {{ inputs.ipAddress }}
+      Time: {{ datetime }}
+
+---
+id: data_backup
+namespace: auth
+
+tasks:
+  - id: backup_user_data
+    type: io.kestra.plugin.aws.s3.Upload
+    bucket: "user-auth-backup"
+    from: "{{ workingDir }}/users.txt"
+    key: "backups/users-{{ datetime }}.txt"
+
+  - id: log_backup
+    type: io.kestra.core.tasks.log.Log
+    message: "Backup completed at {{ datetime }}"
